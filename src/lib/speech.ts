@@ -92,13 +92,13 @@ export function pickVoice(voices: readonly SpeechSynthesisVoice[], lang: Lang): 
 }
 
 /** Read text aloud, replacing anything already playing. Calls onEnd when it finishes or fails. */
-export function speak(text: string, lang: Lang, onEnd?: () => void): void {
+export function speak(text: string, lang: Lang, onEnd?: () => void, rate = 0.95): void {
   if (!canSpeak() || !text.trim()) return
   const synth = window.speechSynthesis
   synth.cancel()
   const u = new SpeechSynthesisUtterance(text)
   u.lang = LANGS[lang].speech
-  u.rate = 0.95
+  u.rate = rate
   const voice = pickVoice(synth.getVoices(), lang)
   if (voice) u.voice = voice
   u.onend = () => onEnd?.()

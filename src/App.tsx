@@ -3,6 +3,7 @@ import { CameraIcon, CheckIcon, CopyIcon, MicIcon, PhotoIcon, SendIcon, SpeakerI
 import { addToHistory, loadHistory, saveHistory, type HistoryItem } from './lib/history'
 import { detectLanguage, LANGS, other, type Lang } from './lib/lang'
 import { readTextFromImage } from './lib/ocr'
+import Phrasebook from './Phrasebook'
 import { canListen, canSpeak, listen, speak, stopSpeaking } from './lib/speech'
 import { localStorageCache, translate, TranslateError } from './lib/translate'
 
@@ -27,6 +28,12 @@ const OCR_STATUS: Record<string, string> = {
   'recognizing text': 'Reading text…',
 }
 
+type Tab = 'translate' | 'phrases'
+const TAB_KEY = 'oui-speak-french.tab'
+const loadTab = (): Tab => {
+  try { return localStorage.getItem(TAB_KEY) === 'phrases' ? 'phrases' : 'translate' } catch { return 'translate' }
+}
+
 const NAME: Record<Lang, string> = { en: 'English', fr: 'French' }
 
 /** The last source language, used when text is too short to tell (e.g. "OK", a place name). */
@@ -48,6 +55,7 @@ export default function App() {
   const [copied, setCopied] = useState(false)
   const [photoUrl, setPhotoUrl] = useState('')
   const [history, setHistory] = useState<HistoryItem[]>(loadHistory)
+  const [tab, setTab] = useState<Tab>(loadTab)
 
   const stopListening = useRef<(() => void) | null>(null)
   const abort = useRef<AbortController | null>(null)
@@ -80,6 +88,16 @@ export default function App() {
 
   // Each new translation starts at the top of the stage.
   useEffect(() => { stage.current?.scrollTo({ top: 0 }) }, [result])
+
+  const switchTab = (t: Tab) => {
+    if (t === tab) return
+    stopListening.current?.()
+    stopSpeaking()
+    setSpeaking(false)
+    setTab(t)
+    try { localStorage.setItem(TAB_KEY, t) } catch { /* not persisted */ }
+    stage.current?.scrollTo({ top: 0 })
+  }
 
   const quiet = () => {
     stopSpeaking()
@@ -235,10 +253,14 @@ export default function App() {
     <div className="app">
       <header className="top">
         <h1>Oui Speak French</h1>
-        <p className="subtitle">English ⇄ Français</p>
+        <nav className="tabs" aria-label="Sections">
+          <button className={tab === 'translate' ? 'on' : ''} aria-current={tab === 'translate' ? 'page' : undefined} onClick={() => switchTab('translate')}>Translate</button>
+          <button className={tab === 'phrases' ? 'on' : ''} aria-current={tab === 'phrases' ? 'page' : undefined} onClick={() => switchTab('phrases')}>Phrases</button>
+        </nav>
       </header>
 
       <main className="stage" ref={stage}>
+        {tab === 'phrases' ? <Phrasebook /> : <>
         {error && <p className="error" role="alert">{error}</p>}
 
         {photoUrl && (
@@ -314,12 +336,13 @@ export default function App() {
           </section>
         )}
 
+        </>}
         <p className="foot">
           Translations by <a href="https://mymemory.translated.net" target="_blank" rel="noreferrer">MyMemory</a>. Photos are read on your device.
         </p>
       </main>
 
-      <footer className="dock">
+      {tab === 'translate' && <footer className="dock">
         {!micSupported && <p className="hint">Tip: tap the 🎤 key on your keyboard to dictate.</p>}
         <div className="composer">
           <textarea
@@ -360,7 +383,7 @@ export default function App() {
             <input type="file" accept="image/*" onChange={onPhoto} disabled={ocrBusy || listening !== null} hidden />
           </label>
         </div>
-      </footer>
+      </footer>}
     </div>
   )
 }
