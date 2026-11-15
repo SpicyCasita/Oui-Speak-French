@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState, type ChangeEvent } from 'react'
-import { CameraIcon, CheckIcon, CopyIcon, MicIcon, PhotoIcon, SpeakerIcon, StopIcon, XIcon } from './Icons'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ChangeEvent } from 'react'
+import { CameraIcon, CheckIcon, CopyIcon, MicIcon, PhotoIcon, SendIcon, SpeakerIcon, StopIcon, XIcon } from './Icons'
 import { addToHistory, loadHistory, saveHistory, type HistoryItem } from './lib/history'
 import { detectLanguage, LANGS, other, type Lang } from './lib/lang'
 import { readTextFromImage } from './lib/ocr'
@@ -52,6 +52,8 @@ export default function App() {
   const stopListening = useRef<(() => void) | null>(null)
   const abort = useRef<AbortController | null>(null)
   const lastFrom = useRef<Lang>(loadLast())
+  const textarea = useRef<HTMLTextAreaElement>(null)
+  const stage = useRef<HTMLElement>(null)
 
   const micSupported = canListen()
   const ttsSupported = canSpeak()
@@ -67,6 +69,17 @@ export default function App() {
   }, [ttsSupported])
 
   useEffect(() => () => { if (photoUrl) URL.revokeObjectURL(photoUrl) }, [photoUrl])
+
+  // Grow the input with its text, up to the CSS max-height.
+  useLayoutEffect(() => {
+    const el = textarea.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${el.scrollHeight}px`
+  }, [text])
+
+  // Each new translation starts at the top of the stage.
+  useEffect(() => { stage.current?.scrollTo({ top: 0 }) }, [result])
 
   const quiet = () => {
     stopSpeaking()
@@ -199,7 +212,8 @@ export default function App() {
   }
 
   const ocrBusy = busy !== null && busy !== 'translating'
-  const stale = result !== null && text.trim() !== result.src
+  const translating = busy === 'translating'
+  const stale = result !== null && !translating && listening === null && text.trim() !== '' && text.trim() !== result.src
 
   const micButton = (lang: Lang) => {
     const live = listening === lang
@@ -218,31 +232,14 @@ export default function App() {
   }
 
   return (
-    <main className="app">
+    <div className="app">
       <header className="top">
         <h1>Oui Speak French</h1>
         <p className="subtitle">English ⇄ Français</p>
       </header>
 
-      <section className="card input-card" aria-label="Text to translate">
-        <div className="field">
-          <textarea
-            value={text}
-            onChange={e => setText(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void run(text) }}
-            placeholder={micSupported
-              ? 'Tap a mic and speak, or type or scan English or French…'
-              : 'Type English or French (or use your keyboard mic), or scan a photo…'}
-            lang={listening ?? result?.from}
-            rows={4}
-            aria-label="Text to translate"
-          />
-          {text && (
-            <button className="icon-btn clear" onClick={clearAll} aria-label="Clear">
-              <XIcon />
-            </button>
-          )}
-        </div>
+      <main className="stage" ref={stage}>
+        {error && <p className="error" role="alert">{error}</p>}
 
         {photoUrl && (
           <div className="photo">
@@ -256,78 +253,114 @@ export default function App() {
           </div>
         )}
 
+        {listening ? (
+          <section className="result" aria-live="polite">
+            <p className="note">Listening · {NAME[listening]}</p>
+            <p className="out" lang={listening}>{text || '…'}</p>
+          </section>
+        ) : result ? (
+          <section className={`result ${stale ? 'stale' : ''} ${translating ? 'pending' : ''}`} aria-label={NAME[result.to]} aria-live="polite">
+            <p className="note">{NAME[result.from]} → {NAME[result.to]}</p>
+            <p className="src" lang={result.from}>{result.src}</p>
+            <p className="out" lang={result.to}>{result.out}</p>
+            <div className="result-actions">
+              {ttsSupported && (
+                <button className="pill primary-pill" onClick={toggleSpeak} aria-pressed={speaking}>
+                  {speaking ? <StopIcon /> : <SpeakerIcon />}
+                  <span>{speaking ? 'Stop' : 'Listen'}</span>
+                </button>
+              )}
+              <button className="pill" onClick={copy}>
+                {copied ? <CheckIcon /> : <CopyIcon />}
+                <span>{copied ? 'Copied' : 'Copy'}</span>
+              </button>
+            </div>
+            {stale
+              ? <p className="hint">The text changed. Tap the arrow to translate it.</p>
+              : !translating && (
+                <button className="link flip" onClick={() => run(result.src, result.to)}>
+                  Actually {NAME[result.to]}? Translate to {NAME[result.from]}
+                </button>
+              )}
+          </section>
+        ) : translating ? (
+          <section className="result pending" aria-live="polite">
+            <p className="note">Translating…</p>
+            <p className="out">{text}</p>
+          </section>
+        ) : !ocrBusy && (
+          <div className="empty">
+            <strong>Bonjour!</strong>
+            <p>Speak, type, or snap a photo in English or French. It translates to the other one.</p>
+          </div>
+        )}
+
+        {!listening && history.length > 0 && (
+          <section className="history" aria-label="Recent translations">
+            <div className="history-head">
+              <h2>Recent</h2>
+              <button className="link" onClick={() => { saveHistory([]); setHistory([]) }}>Clear</button>
+            </div>
+            <ul>
+              {history.map(item => (
+                <li key={`${item.at}-${item.from}`}>
+                  <button onClick={() => pickHistory(item)}>
+                    <span className="h-src" lang={item.from}>{item.src}</span>
+                    <span className="h-out" lang={item.to}>{item.out}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        <p className="foot">
+          Translations by <a href="https://mymemory.translated.net" target="_blank" rel="noreferrer">MyMemory</a>. Photos are read on your device.
+        </p>
+      </main>
+
+      <footer className="dock">
+        {!micSupported && <p className="hint">Tip: tap the 🎤 key on your keyboard to dictate.</p>}
+        <div className="composer">
+          <textarea
+            ref={textarea}
+            value={text}
+            onChange={e => setText(e.target.value)}
+            onKeyDown={e => {
+              // Enter translates; Shift+Enter adds a line.
+              if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                e.preventDefault()
+                if (text.trim() && busy === null && listening === null) void run(text)
+              }
+            }}
+            placeholder="Type English or French…"
+            lang={listening ?? undefined}
+            rows={1}
+            enterKeyHint="go"
+            aria-label="Text to translate"
+          />
+          {text && (
+            <button className="icon-btn" onClick={clearAll} aria-label="Clear">
+              <XIcon />
+            </button>
+          )}
+          <button className="icon-btn send" onClick={() => run(text)} disabled={!text.trim() || busy !== null || listening !== null} aria-label="Translate">
+            <SendIcon />
+          </button>
+        </div>
         <div className="actions">
           {micSupported && micButton('en')}
           {micSupported && micButton('fr')}
-          <label className={`tool ${ocrBusy || listening ? 'disabled' : ''}`}>
+          <label className={`tool ${ocrBusy || listening ? 'disabled' : ''}`} aria-label="Take a photo">
             <CameraIcon />
-            <span>Camera</span>
             <input type="file" accept="image/*" capture="environment" onChange={onPhoto} disabled={ocrBusy || listening !== null} hidden />
           </label>
-          <label className={`tool ${ocrBusy || listening ? 'disabled' : ''}`}>
+          <label className={`tool ${ocrBusy || listening ? 'disabled' : ''}`} aria-label="Choose a photo">
             <PhotoIcon />
-            <span>Photos</span>
             <input type="file" accept="image/*" onChange={onPhoto} disabled={ocrBusy || listening !== null} hidden />
           </label>
         </div>
-
-        <button className="primary" onClick={() => run(text)} disabled={!text.trim() || busy !== null || listening !== null}>
-          {busy === 'translating' ? 'Translating…' : 'Translate'}
-        </button>
-        {!micSupported && <p className="hint">Tip: this browser can't take voice input directly. Tap the 🎤 key on your keyboard to dictate.</p>}
-      </section>
-
-      {error && <p className="error" role="alert">{error}</p>}
-
-      {result && (
-        <section className={`card result ${stale ? 'stale' : ''}`} aria-label={NAME[result.to]} aria-live="polite">
-          <p className="note">
-            <span>{NAME[result.from]} → {NAME[result.to]}</span>
-            {!stale && busy === null && (
-              <button className="link" onClick={() => run(result.src, result.to)}>
-                It's {NAME[result.to]}? Translate to {NAME[result.from]}
-              </button>
-            )}
-          </p>
-          <p className="out" lang={result.to}>{result.out}</p>
-          <div className="result-actions">
-            {ttsSupported && (
-              <button className="pill" onClick={toggleSpeak} aria-pressed={speaking}>
-                {speaking ? <StopIcon /> : <SpeakerIcon />}
-                <span>{speaking ? 'Stop' : 'Listen'}</span>
-              </button>
-            )}
-            <button className="pill" onClick={copy}>
-              {copied ? <CheckIcon /> : <CopyIcon />}
-              <span>{copied ? 'Copied' : 'Copy'}</span>
-            </button>
-          </div>
-          {stale && <p className="hint">The text changed. Tap Translate to update.</p>}
-        </section>
-      )}
-
-      {history.length > 0 && (
-        <section className="history" aria-label="Recent translations">
-          <div className="history-head">
-            <h2>Recent</h2>
-            <button className="link" onClick={() => { saveHistory([]); setHistory([]) }}>Clear</button>
-          </div>
-          <ul>
-            {history.map(item => (
-              <li key={`${item.at}-${item.from}`}>
-                <button onClick={() => pickHistory(item)}>
-                  <span className="h-src" lang={item.from}>{item.src}</span>
-                  <span className="h-out" lang={item.to}>{item.out}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      <footer className="foot">
-        Translations by <a href="https://mymemory.translated.net" target="_blank" rel="noreferrer">MyMemory</a>. Photos are read on your device.
       </footer>
-    </main>
+    </div>
   )
 }
