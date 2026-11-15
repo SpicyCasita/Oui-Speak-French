@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent } from 'react'
-import { CameraIcon, CheckIcon, CopyIcon, MicIcon, PhotoIcon, SpeakerIcon, StopIcon, SwapIcon, XIcon } from './Icons'
+import { CameraIcon, CheckIcon, CopyIcon, MicIcon, PhotoIcon, SpeakerIcon, StopIcon, XIcon } from './Icons'
 import { addToHistory, loadHistory, saveHistory, type HistoryItem } from './lib/history'
 import { detectLanguage, LANGS, other, type Lang } from './lib/lang'
 import { readTextFromImage } from './lib/ocr'
@@ -27,23 +27,23 @@ const OCR_STATUS: Record<string, string> = {
   'recognizing text': 'Reading text…',
 }
 
-const FROM_KEY = 'oui-speak-french.from'
-const loadFrom = (): Lang => {
-  try { return localStorage.getItem(FROM_KEY) === 'fr' ? 'fr' : 'en' } catch { return 'en' }
+const NAME: Record<Lang, string> = { en: 'English', fr: 'French' }
+
+/** The last source language, used when text is too short to tell (e.g. "OK", a place name). */
+const LAST_KEY = 'oui-speak-french.from'
+const loadLast = (): Lang => {
+  try { return localStorage.getItem(LAST_KEY) === 'fr' ? 'fr' : 'en' } catch { return 'en' }
 }
-const saveFrom = (l: Lang) => {
-  try { localStorage.setItem(FROM_KEY, l) } catch { /* not persisted */ }
+const saveLast = (l: Lang) => {
+  try { localStorage.setItem(LAST_KEY, l) } catch { /* not persisted */ }
 }
 
 export default function App() {
-  const [from, setFromState] = useState<Lang>(loadFrom)
-  const to = other(from)
   const [text, setText] = useState('')
   const [result, setResult] = useState<Result | null>(null)
   const [busy, setBusy] = useState<Busy>(null)
   const [error, setError] = useState('')
-  const [note, setNote] = useState('')
-  const [listening, setListening] = useState(false)
+  const [listening, setListening] = useState<Lang | null>(null)
   const [speaking, setSpeaking] = useState(false)
   const [copied, setCopied] = useState(false)
   const [photoUrl, setPhotoUrl] = useState('')
@@ -51,14 +51,10 @@ export default function App() {
 
   const stopListening = useRef<(() => void) | null>(null)
   const abort = useRef<AbortController | null>(null)
+  const lastFrom = useRef<Lang>(loadLast())
 
   const micSupported = canListen()
   const ttsSupported = canSpeak()
-
-  const setFrom = (l: Lang) => {
-    setFromState(l)
-    saveFrom(l)
-  }
 
   // Chrome loads voices asynchronously; ask early so the first tap on Listen has the right voice.
   useEffect(() => {
@@ -77,10 +73,14 @@ export default function App() {
     setSpeaking(false)
   }
 
-  const run = useCallback(async (input: string, src: Lang) => {
+  /** Translate into the opposite language. `src` is known for speech; otherwise it's detected. */
+  const run = useCallback(async (input: string, src?: Lang) => {
     const source = input.trim()
     if (!source) return
-    const dst = other(src)
+    const from = src ?? detectLanguage(source) ?? lastFrom.current
+    const to = other(from)
+    lastFrom.current = from
+    saveLast(from)
     abort.current?.abort()
     const ctrl = new AbortController()
     abort.current = ctrl
@@ -89,10 +89,10 @@ export default function App() {
     stopSpeaking()
     setSpeaking(false)
     try {
-      const out = await translate(source, { from: src, to: dst, cache, signal: ctrl.signal })
+      const out = await translate(source, { from, to, cache, signal: ctrl.signal })
       if (ctrl.signal.aborted) return
-      setResult({ src: source, out, from: src, to: dst })
-      setHistory(h => addToHistory(h, { from: src, to: dst, src: source, out, at: Date.now() }))
+      setResult({ src: source, out, from, to })
+      setHistory(h => addToHistory(h, { from, to, src: source, out, at: Date.now() }))
     } catch (e) {
       if ((e as Error).name === 'AbortError') return
       setError(e instanceof TranslateError ? e.message : 'Something went wrong translating that. Try again.')
@@ -104,44 +104,29 @@ export default function App() {
     }
   }, [])
 
-  /** Flip the direction. A finished translation becomes the new input, so you can reply to it. */
-  const swap = () => {
-    stopListening.current?.()
-    abort.current?.abort()
-    quiet()
-    setFrom(to)
-    if (result) {
-      setText(result.out)
-      setResult(null)
-    }
-    setNote('')
-    setPhotoUrl('')
-  }
-
-  const toggleMic = () => {
+  const toggleMic = (lang: Lang) => {
     if (listening) {
       stopListening.current?.()
       return
     }
     setError('')
-    setNote('')
     quiet()
-    const before = text.trim()
-    const lang = from
+    setPhotoUrl('')
     let heard = ''
-    setListening(true)
+    setText('')
+    setListening(lang)
     stopListening.current = listen({
       lang,
       onTranscript: t => {
         heard = t
-        setText(before ? `${before} ${t}` : t)
+        setText(t)
       },
       onError: setError,
       onEnd: () => {
-        setListening(false)
+        setListening(null)
         stopListening.current = null
         // Translate what was said as soon as dictation finishes.
-        if (heard) void run(before ? `${before} ${heard}` : heard, lang)
+        if (heard) void run(heard, lang)
       },
     })
   }
@@ -151,7 +136,6 @@ export default function App() {
     e.target.value = '' // let the same photo be picked again
     if (!file) return
     setError('')
-    setNote('')
     quiet()
     setPhotoUrl(URL.createObjectURL(file))
     setBusy({ ocr: OCR_STATUS['preparing image'], fraction: 0 })
@@ -163,12 +147,8 @@ export default function App() {
         setError("Couldn't find any text in that photo. Try a closer, sharper, well-lit shot.")
         return
       }
-      // Signs and menus could be in either language: translate whichever it is into the other.
-      const src = detectLanguage(found) ?? from
-      if (src !== from) setFrom(src)
-      setNote(`Found ${src === 'fr' ? 'French' : 'English'} text`)
       setText(found)
-      await run(found, src)
+      await run(found)
     } catch (err) {
       setBusy(null)
       setError(navigator.onLine === false
@@ -205,49 +185,57 @@ export default function App() {
     setText('')
     setResult(null)
     setError('')
-    setNote('')
     setPhotoUrl('')
     setBusy(null)
   }
 
   const pickHistory = (item: HistoryItem) => {
     quiet()
-    setFrom(item.from)
     setText(item.src)
     setResult({ src: item.src, out: item.out, from: item.from, to: item.to })
     setError('')
-    setNote('')
     setPhotoUrl('')
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   const ocrBusy = busy !== null && busy !== 'translating'
-  const stale = result !== null && (text.trim() !== result.src || from !== result.from)
-  const fromName = from === 'en' ? 'English' : 'French'
+  const stale = result !== null && text.trim() !== result.src
+
+  const micButton = (lang: Lang) => {
+    const live = listening === lang
+    return (
+      <button
+        className={`mic ${live ? 'live' : ''}`}
+        onClick={() => toggleMic(lang)}
+        aria-pressed={live}
+        aria-label={live ? 'Stop listening' : `Speak ${NAME[lang]}`}
+        disabled={ocrBusy || (listening !== null && !live)}
+      >
+        {live ? <StopIcon /> : <MicIcon />}
+        <span>{live ? 'Stop' : LANGS[lang].name}</span>
+      </button>
+    )
+  }
 
   return (
     <main className="app">
       <header className="top">
         <h1>Oui Speak French</h1>
-        <button className="pair" onClick={swap} aria-label={`Translating ${LANGS[from].name} to ${LANGS[to].name}. Tap to swap.`}>
-          <span>{LANGS[from].name}</span>
-          <SwapIcon />
-          <span>{LANGS[to].name}</span>
-        </button>
+        <p className="subtitle">English ⇄ Français</p>
       </header>
 
-      <section className="card input-card" aria-label={LANGS[from].name}>
+      <section className="card input-card" aria-label="Text to translate">
         <div className="field">
           <textarea
             value={text}
             onChange={e => setText(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void run(text, from) }}
+            onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void run(text) }}
             placeholder={micSupported
-              ? `Tap the mic and speak ${fromName}, type, or scan a photo…`
-              : `Type ${fromName}, dictate with your keyboard mic, or scan a photo…`}
-            lang={from}
+              ? 'Tap a mic and speak, or type or scan English or French…'
+              : 'Type English or French (or use your keyboard mic), or scan a photo…'}
+            lang={listening ?? result?.from}
             rows={4}
-            aria-label={`${fromName} text`}
+            aria-label="Text to translate"
           />
           {text && (
             <button className="icon-btn clear" onClick={clearAll} aria-label="Clear">
@@ -269,25 +257,21 @@ export default function App() {
         )}
 
         <div className="actions">
-          {micSupported && (
-            <button className={`mic ${listening ? 'live' : ''}`} onClick={toggleMic} aria-pressed={listening} disabled={ocrBusy}>
-              {listening ? <StopIcon /> : <MicIcon />}
-              <span>{listening ? 'Stop' : 'Speak'}</span>
-            </button>
-          )}
-          <label className={`tool ${ocrBusy ? 'disabled' : ''}`}>
+          {micSupported && micButton('en')}
+          {micSupported && micButton('fr')}
+          <label className={`tool ${ocrBusy || listening ? 'disabled' : ''}`}>
             <CameraIcon />
             <span>Camera</span>
-            <input type="file" accept="image/*" capture="environment" onChange={onPhoto} disabled={ocrBusy || listening} hidden />
+            <input type="file" accept="image/*" capture="environment" onChange={onPhoto} disabled={ocrBusy || listening !== null} hidden />
           </label>
-          <label className={`tool ${ocrBusy ? 'disabled' : ''}`}>
+          <label className={`tool ${ocrBusy || listening ? 'disabled' : ''}`}>
             <PhotoIcon />
             <span>Photos</span>
-            <input type="file" accept="image/*" onChange={onPhoto} disabled={ocrBusy || listening} hidden />
+            <input type="file" accept="image/*" onChange={onPhoto} disabled={ocrBusy || listening !== null} hidden />
           </label>
         </div>
 
-        <button className="primary" onClick={() => { setNote(''); void run(text, from) }}disabled={!text.trim() || busy !== null || listening}>
+        <button className="primary" onClick={() => run(text)} disabled={!text.trim() || busy !== null || listening !== null}>
           {busy === 'translating' ? 'Translating…' : 'Translate'}
         </button>
         {!micSupported && <p className="hint">Tip: this browser can't take voice input directly. Tap the 🎤 key on your keyboard to dictate.</p>}
@@ -296,8 +280,15 @@ export default function App() {
       {error && <p className="error" role="alert">{error}</p>}
 
       {result && (
-        <section className={`card result ${stale ? 'stale' : ''}`} aria-label={LANGS[result.to].name} aria-live="polite">
-          {note && <p className="note">{note} → {result.to === 'en' ? 'English' : 'French'}</p>}
+        <section className={`card result ${stale ? 'stale' : ''}`} aria-label={NAME[result.to]} aria-live="polite">
+          <p className="note">
+            <span>{NAME[result.from]} → {NAME[result.to]}</span>
+            {!stale && busy === null && (
+              <button className="link" onClick={() => run(result.src, result.to)}>
+                It's {NAME[result.to]}? Translate to {NAME[result.from]}
+              </button>
+            )}
+          </p>
           <p className="out" lang={result.to}>{result.out}</p>
           <div className="result-actions">
             {ttsSupported && (

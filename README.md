@@ -1,6 +1,6 @@
 # Oui Speak French
 
-English ⇄ French translator for your phone. Speak, type, or scan a photo, then get the translation and hear it read aloud. Tap the language pill to swap direction. Photos are detected as French or English and translated into the other, so signs and menus just work. Open it on your phone and tap **Share → Add to Home Screen** to install it.
+English ⇄ French translator for your phone. Type or scan a photo in either language and it works out which one it is, then translates into the other. To speak, tap 🎤 English or 🎤 Français: speech recognition has to know the language before you start. Hear the result read aloud. Open it on your phone and tap **Share → Add to Home Screen** to install it.
 
 Everything runs in the browser: there's no backend and no API key.
 
