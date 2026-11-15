@@ -1,22 +1,25 @@
 import { describe, expect, it } from 'vitest'
-import { pickFrenchVoice } from './speech'
+import { pickVoice } from './speech'
 
 const voice = (name: string, lang: string, localService = true, isDefault = false) =>
   ({ name, lang, localService, default: isDefault, voiceURI: name }) as SpeechSynthesisVoice
 
-describe('pickFrenchVoice', () => {
+describe('pickVoice', () => {
   it('prefers fr-FR over other French voices', () => {
-    const v = pickFrenchVoice([voice('Samantha', 'en-US'), voice('Amélie', 'fr-CA'), voice('Thomas', 'fr-FR')])
+    const v = pickVoice([voice('Samantha', 'en-US'), voice('Amélie', 'fr-CA'), voice('Thomas', 'fr-FR')], 'fr')
     expect(v?.name).toBe('Thomas')
   })
   it('accepts underscore locales (Android) and any French as a fallback', () => {
-    expect(pickFrenchVoice([voice('x', 'en_US'), voice('y', 'fr_BE')])?.name).toBe('y')
-    expect(pickFrenchVoice([voice('z', 'fr_FR')])?.name).toBe('z')
+    expect(pickVoice([voice('x', 'en_US'), voice('y', 'fr_BE')], 'fr')?.name).toBe('y')
+    expect(pickVoice([voice('z', 'fr_FR')], 'fr')?.name).toBe('z')
   })
   it('prefers on-device voices', () => {
-    expect(pickFrenchVoice([voice('net', 'fr-FR', false), voice('local', 'fr-FR', true)])?.name).toBe('local')
+    expect(pickVoice([voice('net', 'fr-FR', false), voice('local', 'fr-FR', true)], 'fr')?.name).toBe('local')
+  })
+  it('picks English voices for English, preferring en-US', () => {
+    expect(pickVoice([voice('Thomas', 'fr-FR'), voice('Daniel', 'en-GB'), voice('Samantha', 'en-US')], 'en')?.name).toBe('Samantha')
   })
   it('returns undefined when there is no French voice', () => {
-    expect(pickFrenchVoice([voice('Samantha', 'en-US')])).toBeUndefined()
+    expect(pickVoice([voice('Samantha', 'en-US')], 'fr')).toBeUndefined()
   })
 })

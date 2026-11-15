@@ -1,4 +1,5 @@
-/** Thin wrappers over the Web Speech API: English dictation in, French speech out. */
+/** Thin wrappers over the Web Speech API: dictation in, read-aloud out, in English or French. */
+import { LANGS, type Lang } from './lang'
 
 // SpeechRecognition isn't in TypeScript's DOM lib yet; declare the parts we use.
 interface RecognitionAlternative { transcript: string }
@@ -35,14 +36,15 @@ const ERROR_MESSAGES: Record<string, string> = {
 }
 
 export interface ListenHandlers {
+  lang: Lang
   /** Full transcript so far: the finished words plus the current guess. */
   onTranscript(text: string, isFinal: boolean): void
   onError(message: string): void
   onEnd(): void
 }
 
-/** Start English dictation. Returns a function that stops listening (the final result still arrives). */
-export function listen({ onTranscript, onError, onEnd }: ListenHandlers): () => void {
+/** Start dictation. Returns a function that stops listening (the final result still arrives). */
+export function listen({ lang, onTranscript, onError, onEnd }: ListenHandlers): () => void {
   const Ctor = recognitionCtor()
   if (!Ctor) {
     onError("This browser can't take dictation. Use the mic key on your keyboard instead.")
@@ -50,7 +52,7 @@ export function listen({ onTranscript, onError, onEnd }: ListenHandlers): () => 
     return () => {}
   }
   const rec = new Ctor()
-  rec.lang = 'en-US'
+  rec.lang = LANGS[lang].speech
   rec.continuous = true
   rec.interimResults = true
 
@@ -80,23 +82,24 @@ export function listen({ onTranscript, onError, onEnd }: ListenHandlers): () => 
 
 const joinSpaces = (s: string) => s.replace(/\s+/g, ' ').trim()
 
-/** The best French voice: prefer fr-FR, then any French, then local voices over network ones. */
-export function pickFrenchVoice(voices: readonly SpeechSynthesisVoice[]): SpeechSynthesisVoice | undefined {
-  const fr = voices.filter(v => v.lang.toLowerCase().replace('_', '-').startsWith('fr'))
-  const score = (v: SpeechSynthesisVoice) =>
-    (v.lang.toLowerCase().replace('_', '-') === 'fr-fr' ? 2 : 0) + (v.localService ? 1 : 0) + (v.default ? 0.5 : 0)
-  return fr.sort((a, b) => score(b) - score(a))[0]
+const norm = (l: string) => l.toLowerCase().replace('_', '-')
+
+/** The best voice for a language: prefer its main locale (fr-FR, en-US), then any match, then on-device voices. */
+export function pickVoice(voices: readonly SpeechSynthesisVoice[], lang: Lang): SpeechSynthesisVoice | undefined {
+  const main = norm(LANGS[lang].speech)
+  const score = (v: SpeechSynthesisVoice) => (norm(v.lang) === main ? 2 : 0) + (v.localService ? 1 : 0) + (v.default ? 0.5 : 0)
+  return voices.filter(v => norm(v.lang).startsWith(lang)).sort((a, b) => score(b) - score(a))[0]
 }
 
-/** Read text aloud in French, replacing anything already playing. Calls onEnd when it finishes or fails. */
-export function speakFrench(text: string, onEnd?: () => void): void {
+/** Read text aloud, replacing anything already playing. Calls onEnd when it finishes or fails. */
+export function speak(text: string, lang: Lang, onEnd?: () => void): void {
   if (!canSpeak() || !text.trim()) return
   const synth = window.speechSynthesis
   synth.cancel()
   const u = new SpeechSynthesisUtterance(text)
-  u.lang = 'fr-FR'
+  u.lang = LANGS[lang].speech
   u.rate = 0.95
-  const voice = pickFrenchVoice(synth.getVoices())
+  const voice = pickVoice(synth.getVoices(), lang)
   if (voice) u.voice = voice
   u.onend = () => onEnd?.()
   u.onerror = () => onEnd?.()

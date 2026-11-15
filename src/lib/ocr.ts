@@ -1,6 +1,6 @@
 /**
- * Read English text from a photo with Tesseract.js, all on the device.
- * The library (and ~10 MB of English language data on first use) loads only when a photo is scanned.
+ * Read French and English text from a photo with Tesseract.js, all on the device.
+ * The library and its language data (a few MB, cached after the first scan) load only when a photo is scanned.
  */
 import type { Worker } from 'tesseract.js'
 
@@ -56,6 +56,36 @@ export function cleanOcrText(raw: string): string {
     .join('\n')
 }
 
+/** Words the reader is less sure of than this (0-100) are treated as noise. */
+export const MIN_WORD_CONFIDENCE = 55
+/** Lines the reader is less sure of than this are dropped entirely. */
+export const MIN_LINE_CONFIDENCE = 50
+
+interface OcrWord { text: string; confidence: number }
+interface OcrLine { confidence: number; words: OcrWord[] }
+interface OcrParagraph { lines: OcrLine[] }
+
+/**
+ * Keep only text that looks real. Pictures, logos and textures in a photo come back as short,
+ * low-confidence scraps like "{ P u" or "| (" which would otherwise be translated as gibberish.
+ * Returns raw text: lines separated by \n, paragraphs by a blank line.
+ */
+export function keepConfidentText(paragraphs: OcrParagraph[]): string {
+  return paragraphs
+    .map(p => p.lines
+      .filter(l => l.confidence >= MIN_LINE_CONFIDENCE)
+      .map(l => l.words.filter(w => w.confidence >= MIN_WORD_CONFIDENCE && /[\p{L}\p{N}]/u.test(w.text)))
+      // A real line has a word of 3+ letters, or a short one read with high confidence ("OK", "Wi").
+      .filter(words => words.some(w => {
+        const letters = w.text.match(/\p{L}/gu)?.length ?? 0
+        return letters >= 3 || (letters === 2 && w.confidence >= 80)
+      }))
+      .map(words => words.map(w => w.text.trim()).join(' '))
+      .join('\n'))
+    .filter(Boolean)
+    .join('\n\n')
+}
+
 export type OcrProgress = (status: string, fraction: number) => void
 
 let workerPromise: Promise<Worker> | null = null
@@ -63,7 +93,7 @@ let progressListener: OcrProgress | undefined
 
 function getWorker(): Promise<Worker> {
   workerPromise ??= import('tesseract.js').then(({ createWorker }) =>
-    createWorker('eng', 1, {
+    createWorker(['fra', 'eng'], 1, {
       logger: m => progressListener?.(m.status, typeof m.progress === 'number' ? m.progress : 0),
     }),
   ).catch(e => {
@@ -73,7 +103,7 @@ function getWorker(): Promise<Worker> {
   return workerPromise
 }
 
-/** OCR a photo and return cleaned English text ('' if none was found). */
+/** OCR a photo and return cleaned text ('' if none was found). */
 export async function readTextFromImage(file: Blob, onProgress?: OcrProgress): Promise<string> {
   progressListener = onProgress
   try {
@@ -81,8 +111,9 @@ export async function readTextFromImage(file: Blob, onProgress?: OcrProgress): P
     const canvas = await prepareImage(file)
     onProgress?.('loading text reader', 0)
     const worker = await getWorker()
-    const { data } = await worker.recognize(canvas)
-    return cleanOcrText(data.text)
+    const { data } = await worker.recognize(canvas, {}, { blocks: true, text: true })
+    const raw = data.blocks ? keepConfidentText(data.blocks.flatMap(b => b.paragraphs)) : data.text
+    return cleanOcrText(raw)
   } finally {
     progressListener = undefined
   }

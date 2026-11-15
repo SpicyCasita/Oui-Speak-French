@@ -60,6 +60,14 @@ describe('translate', () => {
     expect(url.searchParams.get('q')).toBe('Where is the train station?')
   })
 
+  it('translates French to English when asked, caching per direction', async () => {
+    const cache = memCache()
+    const fetchFn = vi.fn<typeof fetch>(async () => ok('Exit'))
+    expect(await translate('Sortie', { from: 'fr', to: 'en', fetchFn, cache })).toBe('Exit')
+    expect(new URL(String(fetchFn.mock.calls[0][0])).searchParams.get('langpair')).toBe('fr|en')
+    expect(cache.map.get('fr|en:Sortie')).toBe('Exit')
+  })
+
   it('keeps paragraphs on separate lines and skips blank ones', async () => {
     const fetchFn = vi.fn(async (input: RequestInfo | URL) => ok(`FR(${new URL(String(input)).searchParams.get('q')})`))
     expect(await translate('Hello.\n\nGoodbye.', { fetchFn })).toBe('FR(Hello.)\nFR(Goodbye.)')

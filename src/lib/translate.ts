@@ -1,13 +1,14 @@
 /**
- * English → French via the free MyMemory API (https://mymemory.translated.net/doc/spec.php).
+ * English ⇄ French via the free MyMemory API (https://mymemory.translated.net/doc/spec.php).
  * No key needed; CORS-enabled; anonymous quota is about 5,000 characters a day per IP.
  * Requests are limited to 500 bytes of query, so long text is split on sentence boundaries.
  */
 
+import type { Lang } from './lang'
+
 export const API_URL = 'https://api.mymemory.translated.net/get'
-export const LANG_PAIR = 'en|fr'
-/** MyMemory rejects q over 500 bytes; stay under it with room for multi-byte characters. */
-export const MAX_CHUNK = 450
+/** MyMemory rejects q over 500 bytes; accented French is up to 2 bytes a character, so leave room. */
+export const MAX_CHUNK = 400
 
 export class TranslateError extends Error {
   readonly kind: 'quota' | 'network' | 'service'
@@ -101,8 +102,8 @@ interface MyMemoryResponse {
   quotaFinished?: boolean
 }
 
-async function translateChunk(chunk: string, fetchFn: typeof fetch, signal?: AbortSignal): Promise<string> {
-  const url = `${API_URL}?${new URLSearchParams({ q: chunk, langpair: LANG_PAIR })}`
+async function translateChunk(chunk: string, pair: string, fetchFn: typeof fetch, signal?: AbortSignal): Promise<string> {
+  const url = `${API_URL}?${new URLSearchParams({ q: chunk, langpair: pair })}`
   let res: Response
   try {
     res = await fetchFn(url, { signal })
@@ -125,25 +126,28 @@ async function translateChunk(chunk: string, fetchFn: typeof fetch, signal?: Abo
 }
 
 export interface TranslateOptions {
+  from?: Lang
+  to?: Lang
   fetchFn?: typeof fetch
   cache?: Cache
   signal?: AbortSignal
 }
 
-/** Translate English text to French, keeping line breaks between paragraphs. */
-export async function translate(text: string, { fetchFn = fetch, cache, signal }: TranslateOptions = {}): Promise<string> {
+/** Translate text (English → French by default), keeping line breaks between paragraphs. */
+export async function translate(text: string, { from = 'en', to = 'fr', fetchFn = fetch, cache, signal }: TranslateOptions = {}): Promise<string> {
+  const pair = `${from}|${to}`
   const paragraphs = text.split(/\n+/)
   const out: string[] = []
   for (const para of paragraphs) {
     const parts: string[] = []
     for (const chunk of splitChunks(para)) {
-      const key = `${LANG_PAIR}:${chunk}`
-      let fr = cache?.get(key)
-      if (fr === undefined) {
-        fr = await translateChunk(chunk, fetchFn, signal)
-        cache?.set(key, fr)
+      const key = `${pair}:${chunk}`
+      let out = cache?.get(key)
+      if (out === undefined) {
+        out = await translateChunk(chunk, pair, fetchFn, signal)
+        cache?.set(key, out)
       }
-      parts.push(fr)
+      parts.push(out)
     }
     if (parts.length) out.push(parts.join(' '))
   }
