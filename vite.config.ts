@@ -11,8 +11,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['apple-touch-icon.png', 'favicon-32.png'],
       manifest: {
-        name: 'Traduire: English to French',
-        short_name: 'Traduire',
+        name: 'Oui Speak French',
+        short_name: 'Oui Speak',
         description: 'Speak, type or scan English and get French, read aloud.',
         theme_color: '#1f4fd8',
         background_color: '#f4f6fb',

@@ -177,7 +177,7 @@ export default function App() {
   return (
     <main className="app">
       <header className="top">
-        <h1>Traduire</h1>
+        <h1>Oui Speak French</h1>
         <p className="pair"><span>English</span><span aria-hidden="true">→</span><span>Français</span></p>
       </header>
 

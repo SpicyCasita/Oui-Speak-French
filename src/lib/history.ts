@@ -7,7 +7,7 @@ export interface HistoryItem {
   at: number
 }
 
-const KEY = 'traduire.history.v1'
+const KEY = 'oui-speak-french.history.v1'
 export const MAX_HISTORY = 25
 
 export function loadHistory(): HistoryItem[] {

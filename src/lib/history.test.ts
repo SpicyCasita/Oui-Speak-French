@@ -37,7 +37,7 @@ describe('history', () => {
   })
 
   it('survives corrupt storage', () => {
-    store.set('traduire.history.v1', '{not json')
+    store.set('oui-speak-french.history.v1', '{not json')
     expect(loadHistory()).toEqual([])
   })
 })

@@ -69,7 +69,7 @@ export interface Cache {
 }
 
 /** Small LRU kept in localStorage, so repeated phrases cost no quota and work offline. */
-export function localStorageCache(storageKey = 'traduire.cache.v1', maxEntries = 300): Cache {
+export function localStorageCache(storageKey = 'oui-speak-french.cache.v1', maxEntries = 300): Cache {
   let entries: [string, string][] = []
   try {
     const raw = localStorage.getItem(storageKey)

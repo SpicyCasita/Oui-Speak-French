@@ -1,4 +1,4 @@
-# Traduire
+# Oui Speak French
 
 English → French translator for your phone. Speak, type, or scan a photo, then get the French text and hear it read aloud. Open it on your phone and tap **Share → Add to Home Screen** to install it.
 
