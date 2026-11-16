@@ -103,12 +103,10 @@ function getWorker(): Promise<Worker> {
   return workerPromise
 }
 
-/** OCR a photo and return cleaned text ('' if none was found). */
-export async function readTextFromImage(file: Blob, onProgress?: OcrProgress): Promise<string> {
+/** Read text from an already-prepared canvas (a photo or a camera frame). Returns cleaned text, '' if none. */
+export async function readTextFromCanvas(canvas: HTMLCanvasElement, onProgress?: OcrProgress): Promise<string> {
   progressListener = onProgress
   try {
-    onProgress?.('preparing image', 0)
-    const canvas = await prepareImage(file)
     onProgress?.('loading text reader', 0)
     const worker = await getWorker()
     const { data } = await worker.recognize(canvas, {}, { blocks: true, text: true })
@@ -117,4 +115,11 @@ export async function readTextFromImage(file: Blob, onProgress?: OcrProgress): P
   } finally {
     progressListener = undefined
   }
+}
+
+/** OCR a photo and return cleaned text ('' if none was found). */
+export async function readTextFromImage(file: Blob, onProgress?: OcrProgress): Promise<string> {
+  onProgress?.('preparing image', 0)
+  const canvas = await prepareImage(file)
+  return readTextFromCanvas(canvas, onProgress)
 }

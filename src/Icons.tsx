@@ -13,5 +13,7 @@ export const PhotoIcon = () => <Svg><rect x="3" y="3" width="18" height="18" rx=
 export const SpeakerIcon = () => <Svg><path d="M11 5 6 9H3v6h3l5 4V5z" /><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13" /></Svg>
 export const CopyIcon = () => <Svg><rect x="9" y="9" width="12" height="12" rx="2" /><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1" /></Svg>
 export const CheckIcon = () => <Svg><path d="M20 6 9 17l-5-5" /></Svg>
+export const PauseIcon = () => <Svg><rect x="6" y="5" width="4" height="14" rx="1" fill="currentColor" stroke="none" /><rect x="14" y="5" width="4" height="14" rx="1" fill="currentColor" stroke="none" /></Svg>
+export const PlayIcon = () => <Svg><path d="M7 4.5v15l12-7.5z" fill="currentColor" /></Svg>
 export const SendIcon = () => <Svg><path d="M12 19V5M5 12l7-7 7 7" /></Svg>
 export const XIcon = () => <Svg><path d="M18 6 6 18M6 6l12 12" /></Svg>

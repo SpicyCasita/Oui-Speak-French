@@ -3,11 +3,12 @@ import { CameraIcon, CheckIcon, CopyIcon, MicIcon, PhotoIcon, SendIcon, SpeakerI
 import { addToHistory, loadHistory, saveHistory, type HistoryItem } from './lib/history'
 import { detectLanguage, LANGS, other, type Lang } from './lib/lang'
 import { readTextFromImage } from './lib/ocr'
+import LiveCamera, { type LiveResult } from './LiveCamera'
+import { canStreamCamera } from './lib/live'
 import Phrasebook from './Phrasebook'
 import { canListen, canSpeak, listen, speak, stopSpeaking } from './lib/speech'
-import { localStorageCache, translate, TranslateError } from './lib/translate'
-
-const cache = localStorageCache('oui-speak-french.cache.v1')
+import { translate, TranslateError } from './lib/translate'
+import { translationCache as cache } from './lib/cache'
 
 type Busy = null | 'translating' | { ocr: string; fraction: number }
 
@@ -56,6 +57,8 @@ export default function App() {
   const [photoUrl, setPhotoUrl] = useState('')
   const [history, setHistory] = useState<HistoryItem[]>(loadHistory)
   const [tab, setTab] = useState<Tab>(loadTab)
+  const [live, setLive] = useState(false)
+  const captureInput = useRef<HTMLInputElement>(null)
 
   const stopListening = useRef<(() => void) | null>(null)
   const abort = useRef<AbortController | null>(null)
@@ -220,6 +223,27 @@ export default function App() {
     setBusy(null)
   }
 
+  /** Camera button: live translation where the phone can stream video, otherwise a still photo. */
+  const openCamera = () => {
+    if (ocrBusy || listening) return
+    if (canStreamCamera()) {
+      quiet()
+      setError('')
+      setLive(true)
+    } else captureInput.current?.click()
+  }
+
+  const saveLive = (r: LiveResult) => {
+    setLive(false)
+    lastFrom.current = r.from
+    saveLast(r.from)
+    setText(r.src)
+    setResult(r)
+    setPhotoUrl('')
+    setError('')
+    setHistory(h => addToHistory(h, { ...r, at: Date.now() }))
+  }
+
   const pickHistory = (item: HistoryItem) => {
     quiet()
     setText(item.src)
@@ -374,16 +398,24 @@ export default function App() {
         <div className="actions">
           {micSupported && micButton('en')}
           {micSupported && micButton('fr')}
-          <label className={`tool ${ocrBusy || listening ? 'disabled' : ''}`} aria-label="Take a photo">
+          <button className="tool" onClick={openCamera} disabled={ocrBusy || listening !== null} aria-label="Live camera translation">
             <CameraIcon />
-            <input type="file" accept="image/*" capture="environment" onChange={onPhoto} disabled={ocrBusy || listening !== null} hidden />
-          </label>
+          </button>
+          <input ref={captureInput} type="file" accept="image/*" capture="environment" onChange={onPhoto} hidden />
           <label className={`tool ${ocrBusy || listening ? 'disabled' : ''}`} aria-label="Choose a photo">
             <PhotoIcon />
             <input type="file" accept="image/*" onChange={onPhoto} disabled={ocrBusy || listening !== null} hidden />
           </label>
         </div>
       </footer>}
+
+      {live && (
+        <LiveCamera
+          onClose={() => setLive(false)}
+          onSave={saveLive}
+          onFallback={() => { setLive(false); captureInput.current?.click() }}
+        />
+      )}
     </div>
   )
 }
