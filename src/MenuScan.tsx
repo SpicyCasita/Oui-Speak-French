@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
 import { findMenuItems, foldMenuText, MENU_ITEMS, type MenuItem } from './data/menu'
 import { CameraIcon, PhotoIcon, SpeakerIcon, XIcon } from './Icons'
 import { translationCache } from './lib/cache'
-import { fetchDishPhotos } from './lib/dishPhotos'
+import { fetchDishPhotos, imageSearchUrl } from './lib/dishPhotos'
 import { readLinesFromImage } from './lib/ocr'
 import { canSpeak, speak, stopSpeaking } from './lib/speech'
 import { translate, TranslateError } from './lib/translate'
@@ -170,11 +170,18 @@ export default function MenuScan() {
               <ul>
                 {dishes.map(d => (
                   <li key={d.id} className="dish">
-                    <div className="dish-photo">
-                      {photos[d.id]
-                        ? <img src={photos[d.id]!} alt={d.en} loading="lazy" />
-                        : <span aria-hidden="true">{photos[d.id] === undefined ? '…' : '🍽️'}</span>}
-                    </div>
+                    {photos[d.id] || photos[d.id] === undefined ? (
+                      <div className="dish-photo">
+                        {photos[d.id]
+                          ? <img src={photos[d.id]!} alt={d.en} loading="lazy" />
+                          : <span aria-hidden="true">…</span>}
+                      </div>
+                    ) : (
+                      <a className="dish-photo no-photo" href={imageSearchUrl(d.fr)} target="_blank" rel="noreferrer">
+                        <span aria-hidden="true">🔍</span>
+                        <span>Search photos</span>
+                      </a>
+                    )}
                     <div className="dish-text">
                       <div className="dish-head">
                         <span className="dish-fr" lang="fr">{d.fr}</span>
@@ -186,6 +193,9 @@ export default function MenuScan() {
                       </div>
                       <span className="dish-en">{d.en}</span>
                       <p className="dish-desc">{d.desc}</p>
+                      <a className="more-photos" href={imageSearchUrl(d.fr)} target="_blank" rel="noreferrer">
+                        More photos on Google ↗
+                      </a>
                     </div>
                   </li>
                 ))}
@@ -210,7 +220,7 @@ export default function MenuScan() {
           {scanned && otherLines.length > 0 && (
             <section className="other-lines" aria-label="Other lines on the menu">
               <h2>Everything else on the menu</h2>
-              <p className="hint">Tap a line to translate it.</p>
+              <p className="hint">Tap a line to translate it, or see photos of it on Google.</p>
               <ul>
                 {otherLines.map(({ line, n }) => (
                   <li key={n}>
@@ -218,6 +228,9 @@ export default function MenuScan() {
                       <span lang="fr">{line}</span>
                       {translated[n] && <span className="line-en">{translated[n]}</span>}
                     </button>
+                    <a className="line-photos" href={imageSearchUrl(line.replace(/[\d.,]+\s*(€|eur)?\s*$/i, '').trim())} target="_blank" rel="noreferrer" aria-label={`Photos of ${line}`}>
+                      Photos ↗
+                    </a>
                   </li>
                 ))}
               </ul>

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fetchDishPhotos, photosFromResponse } from './dishPhotos'
+import { fetchDishPhotos, imageSearchUrl, photosFromResponse } from './dishPhotos'
 
 const store = new Map<string, string>()
 globalThis.localStorage = {
@@ -58,5 +58,14 @@ describe('fetchDishPhotos', () => {
     expect(await fetchDishPhotos(['Escargot'], fetchFn)).toEqual({ Escargot: null })
     await fetchDishPhotos(['Escargot'], fetchFn)
     expect(fetchFn).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('imageSearchUrl', () => {
+  it('opens Google Images for the French dish name', () => {
+    const url = new URL(imageSearchUrl("Soupe à l'oignon"))
+    expect(url.origin + url.pathname).toBe('https://www.google.com/search')
+    expect(url.searchParams.get('udm')).toBe('2')
+    expect(url.searchParams.get('q')).toBe("Soupe à l'oignon plat")
   })
 })

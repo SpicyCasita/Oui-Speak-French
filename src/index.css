@@ -503,6 +503,9 @@ button:disabled { cursor: default; }
   color: var(--muted);
 }
 .dish-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.no-photo { flex-direction: column; gap: 4px; font-size: 13px; font-weight: 600; color: var(--blue); text-decoration: none; text-align: center; display: flex; align-items: center; justify-content: center; }
+.no-photo span:first-child { font-size: 28px; }
+.more-photos { align-self: flex-start; margin-top: 6px; color: var(--blue); font-size: 14px; font-weight: 600; text-decoration: none; padding: 4px 0; }
 .dish-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .dish-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
 .dish-fr { font-size: 19px; font-weight: 650; line-height: 1.25; }
@@ -526,7 +529,11 @@ button:disabled { cursor: default; }
 .terms dt { font-weight: 650; }
 .terms dd { margin: 2px 0 0; color: var(--muted); font-size: 15px; line-height: 1.4; }
 .other-lines .hint { margin: -4px 4px 8px; }
+.other-lines li { display: flex; align-items: stretch; gap: 8px; }
+.line-photos { flex: none; display: flex; align-items: center; padding: 0 12px; border-radius: 12px; background: var(--blue-soft); color: var(--blue); font-size: 14px; font-weight: 600; text-decoration: none; }
 .other-lines li button {
+  flex: 1;
+  min-width: 0;
   width: 100%;
   text-align: left;
   display: flex;

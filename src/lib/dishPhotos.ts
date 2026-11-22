@@ -69,3 +69,7 @@ export async function fetchDishPhotos(titles: string[], fetchFn: typeof fetch = 
   saveCache(all)
   return Object.fromEntries(titles.map(t => [t, cache[t] ?? null]))
 }
+
+/** Google Images results for a dish (opens in the browser; Google has no free image API to call from the app). */
+export const imageSearchUrl = (frenchName: string) =>
+  `https://www.google.com/search?${new URLSearchParams({ udm: '2', q: `${frenchName} plat` })}`
