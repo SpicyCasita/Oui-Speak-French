@@ -28,6 +28,16 @@ export default defineConfig({
         // Tesseract's worker, WASM core and language data come from jsdelivr; keep them after the first scan.
         runtimeCaching: [
           {
+            // Dish photos for the menu guide.
+            urlPattern: /^https:\/\/upload\.wikimedia\.org\//,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'dish-photos',
+              expiration: { maxEntries: 300, maxAgeSeconds: 180 * 24 * 3600 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+          {
             urlPattern: /^https:\/\/cdn\.jsdelivr\.net\//,
             handler: 'CacheFirst',
             options: {

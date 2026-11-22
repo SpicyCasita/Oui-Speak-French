@@ -103,18 +103,29 @@ function getWorker(): Promise<Worker> {
   return workerPromise
 }
 
-/** Read text from an already-prepared canvas (a photo or a camera frame). Returns cleaned text, '' if none. */
-export async function readTextFromCanvas(canvas: HTMLCanvasElement, onProgress?: OcrProgress): Promise<string> {
+/** Raw confident text from a canvas: lines separated by \n, paragraphs by a blank line. */
+async function readRaw(canvas: HTMLCanvasElement, onProgress?: OcrProgress): Promise<string> {
   progressListener = onProgress
   try {
     onProgress?.('loading text reader', 0)
     const worker = await getWorker()
     const { data } = await worker.recognize(canvas, {}, { blocks: true, text: true })
-    const raw = data.blocks ? keepConfidentText(data.blocks.flatMap(b => b.paragraphs)) : data.text
-    return cleanOcrText(raw)
+    return data.blocks ? keepConfidentText(data.blocks.flatMap(b => b.paragraphs)) : data.text
   } finally {
     progressListener = undefined
   }
+}
+
+/** Read text from an already-prepared canvas (a photo or a camera frame). Returns cleaned text, '' if none. */
+export async function readTextFromCanvas(canvas: HTMLCanvasElement, onProgress?: OcrProgress): Promise<string> {
+  return cleanOcrText(await readRaw(canvas, onProgress))
+}
+
+/** Read a photo line by line, as printed (for menus, where each line is usually a separate dish). */
+export async function readLinesFromImage(file: Blob, onProgress?: OcrProgress): Promise<string[]> {
+  onProgress?.('preparing image', 0)
+  const raw = await readRaw(await prepareImage(file), onProgress)
+  return raw.split('\n').map(l => l.replace(/\s+/g, ' ').trim()).filter(l => /[\p{L}]{2}/u.test(l))
 }
 
 /** OCR a photo and return cleaned text ('' if none was found). */

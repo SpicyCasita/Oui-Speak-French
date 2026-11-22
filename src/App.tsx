@@ -5,6 +5,7 @@ import { detectLanguage, LANGS, other, type Lang } from './lib/lang'
 import { readTextFromImage } from './lib/ocr'
 import LiveCamera, { type LiveResult } from './LiveCamera'
 import { canStreamCamera } from './lib/live'
+import MenuScan from './MenuScan'
 import Phrasebook from './Phrasebook'
 import { canListen, canSpeak, listen, speak, stopSpeaking } from './lib/speech'
 import { translate, TranslateError } from './lib/translate'
@@ -29,10 +30,13 @@ const OCR_STATUS: Record<string, string> = {
   'recognizing text': 'Reading text…',
 }
 
-type Tab = 'translate' | 'phrases'
+type Tab = 'translate' | 'menu' | 'phrases'
 const TAB_KEY = 'oui-speak-french.tab'
 const loadTab = (): Tab => {
-  try { return localStorage.getItem(TAB_KEY) === 'phrases' ? 'phrases' : 'translate' } catch { return 'translate' }
+  try {
+    const t = localStorage.getItem(TAB_KEY)
+    return t === 'menu' || t === 'phrases' ? t : 'translate'
+  } catch { return 'translate' }
 }
 
 const NAME: Record<Lang, string> = { en: 'English', fr: 'French' }
@@ -279,12 +283,13 @@ export default function App() {
         <h1>Oui Speak French</h1>
         <nav className="tabs" aria-label="Sections">
           <button className={tab === 'translate' ? 'on' : ''} aria-current={tab === 'translate' ? 'page' : undefined} onClick={() => switchTab('translate')}>Translate</button>
+          <button className={tab === 'menu' ? 'on' : ''} aria-current={tab === 'menu' ? 'page' : undefined} onClick={() => switchTab('menu')}>Menu</button>
           <button className={tab === 'phrases' ? 'on' : ''} aria-current={tab === 'phrases' ? 'page' : undefined} onClick={() => switchTab('phrases')}>Phrases</button>
         </nav>
       </header>
 
       <main className="stage" ref={stage}>
-        {tab === 'phrases' ? <Phrasebook /> : <>
+        {tab === 'phrases' ? <Phrasebook /> : tab === 'menu' ? <MenuScan /> : <>
         {error && <p className="error" role="alert">{error}</p>}
 
         {photoUrl && (
